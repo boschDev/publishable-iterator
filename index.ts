@@ -1,6 +1,5 @@
 type PublishableIteratorCallback<T> = (value: IteratorResult<T>) => void
 
-const registeredCallbacksSymbol = Symbol('registeredCallbacks')
 const activeClientsSymbol = Symbol('activeClients')
 
 const trigger = <T extends (...args: any[]) => any> (cb: T | undefined, ...args: Parameters<T>) => cb != null && cb(...args)
@@ -8,12 +7,30 @@ const trigger = <T extends (...args: any[]) => any> (cb: T | undefined, ...args:
 class PublishableIteratorClient<T> implements AsyncIterableIterator<T> {
   [Symbol.asyncIterator] (): AsyncIterableIterator<any> {return this}
 
+  active: boolean = true
+  messagesToSend: Array<IteratorResult<T>> = []
+  private pushValueCallback: PublishableIteratorCallback<T> | undefined
+
+  pushValue (result: IteratorResult<T>): void {
+    if (!this.active) return
+    if (this.pushValueCallback == null) {
+      this.messagesToSend.push(result)
+    } else {
+      this.pushValueCallback(result)
+      this.pushValueCallback = undefined
+    }
+  }
+
   constructor (private readonly publishableIterator: PublishableIterator<T>) {
     publishableIterator[activeClientsSymbol].add(this)
     trigger(this.publishableIterator.onIteratorStarted)
   }
 
   private cleanup () {
+    if (!this.active) return
+    this.active = false
+
+    this.messagesToSend = []
     const activeClients = this.publishableIterator[activeClientsSymbol]
     activeClients.delete(this)
     trigger(this.publishableIterator.onIteratorStopped)
@@ -22,18 +39,30 @@ class PublishableIteratorClient<T> implements AsyncIterableIterator<T> {
     }
   }
 
+  private async getNextValue (): Promise<IteratorResult<T>> {
+    if (this.messagesToSend.length !== 0) {
+      return this.messagesToSend.shift() as any
+    }
+
+    return await new Promise<IteratorResult<T>>(resolve => {
+      this.pushValueCallback = resolve
+    })
+  }
+
   async next (): Promise<IteratorResult<T>> {
-    return await this.publishableIterator.waitUntilValue()
+    const value = await this.getNextValue()
+    if (value.done) return this.return()
+    return value
   }
 
-  async return (value?: PromiseLike<any> | any): Promise<IteratorResult<T>> {
+  async return (): Promise<IteratorResult<T>> {
     this.cleanup()
-    return { done: true, value: await value }
+    return { done: true, value: null }
   }
 
-  async throw (e?: any): Promise<IteratorResult<T>> {
+  async throw (error?: any): Promise<IteratorResult<T>> {
     this.cleanup()
-    return { done: true, value: e }
+    return Promise.reject(error)
   }
 }
 
@@ -42,25 +71,17 @@ export default class PublishableIterator<T = any> implements AsyncIterable<T> {
     return this.iterator()
   }
 
-  private [registeredCallbacksSymbol]: PublishableIteratorCallback<T>[] = []
   private [activeClientsSymbol] = new Set<PublishableIteratorClient<T>>()
 
   public onIteratorStarted: undefined | (() => void)
   public onIteratorStopped: undefined | (() => void)
   public onNoActiveIterators: undefined | (() => void)
 
-  async waitUntilValue (): Promise<IteratorResult<T>> {
-    return await new Promise<IteratorResult<T>>(resolve => {
-      this[registeredCallbacksSymbol].push(resolve)
-    })
-  }
-
   publish (value: T, done?: true) {
     const publishValue: IteratorResult<T> = { value, done }
-    let listener: PublishableIteratorCallback<T> | undefined
-    while (listener = this[registeredCallbacksSymbol].shift()) {
-      listener(publishValue)
-    }
+    this[activeClientsSymbol].forEach(client => {
+      client.pushValue(publishValue)
+    })
   }
 
   iterator (): PublishableIteratorClient<T> {

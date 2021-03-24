@@ -1,11 +1,11 @@
 {
   "name": "publishable-iterator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A javascript publishable async iterator lib",
   "main": "index.js",
   "scripts": {
-    "compile": "tsc",
-    "publish-lib": "npm run compile && npm publish --access=public"
+    "build": "tsc",
+    "publish-lib": "npm run build && npm publish --access=public"
   },
   "repository": {
     "type": "git",
