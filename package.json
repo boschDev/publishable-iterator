@@ -1,11 +1,12 @@
 {
   "name": "publishable-iterator",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A javascript publishable async iterator lib",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "publish-lib": "npm run build && npm publish --access=public"
+    "publish-lib": "npm run build && npm publish --access=public",
+    "lint": "ts-standard"
   },
   "repository": {
     "type": "git",
@@ -23,6 +24,7 @@
   },
   "homepage": "https://github.com/boschDev/publishable-iterator#readme",
   "devDependencies": {
+    "ts-standard": "^10.0.0",
     "typescript": "^4.2.3"
   }
 }

@@ -3,6 +3,7 @@
     "module": "CommonJS",
     "target": "ES2017",
     "sourceMap": true,
+    "strict": true,
     "lib": [
       "ESNext"
     ]
